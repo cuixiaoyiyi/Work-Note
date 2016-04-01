@@ -59,7 +59,7 @@ http://blog.csdn.net/xiaanming/article/details/39057201
       	protected Reference<View> viewRef;
       	protected boolean checkActualViewSize;
 ###ViewAware构造
-        public ViewAware(View view, boolean checkActualViewSize) {
+      public ViewAware(View view, boolean checkActualViewSize) {
       		if (view == null) throw new IllegalArgumentException("view must not be null");
       
       		this.viewRef = new WeakReference<View>(view);
@@ -84,3 +84,28 @@ http://blog.csdn.net/xiaanming/article/details/39057201
       	}
 ###ViewAware getHeight()
     同上
+###ViewAware getId()
+    hashcode而不是view.getId
+          View view = viewRef.get();
+	    return view == null ? super.hashCode() : view.hashCode();
+###ViewAware setImageDrawable(Drawable drawable)  setImageBitmap(Bitmap bitmap)
+      1.在主进程中进行<br/>Looper.myLooper() == Looper.getMainLooper() 判断是否在主进程中
+      2.定义了新的抽象方法，设置图片及展示等在抽象方法中实现
+      @Override
+	public boolean setImageDrawable(Drawable drawable) {
+      if (Looper.myLooper() == Looper.getMainLooper()) {
+		View view = viewRef.get();
+		if (view != null) {
+			setImageDrawableInto(drawable, view);
+			return true;
+		}
+	      } else {
+		L.w(WARN_CANT_SET_DRAWABLE);
+	}
+	return false;
+	}
+###ViewAware setImageBitmap(Bitmap bitmap)
+      同上
+###ViewAware abstract void setImageDrawableInto(Drawable drawable, View view)  ；setImageBitmapInto(Bitmap bitmap, View view) 
+具体设置待实现
+      

@@ -108,4 +108,19 @@ http://blog.csdn.net/xiaanming/article/details/39057201
       同上
 ###ViewAware abstract void setImageDrawableInto(Drawable drawable, View view)  ；setImageBitmapInto(Bitmap bitmap, View view) 
 具体设置待实现
-      
+## ImageViewAware
+	1.继承ViewAware
+	2.取width or height 时取mMaxWidth & mMaxHeight (利用反射)
+	protected void setImageDrawableInto(Drawable drawable, View view) {
+		((ImageView) view).setImageDrawable(drawable);
+		if (drawable instanceof AnimationDrawable) {
+			((AnimationDrawable)drawable).start();//是动画类时播放
+		}
+	}
+## NonViewAware
+	1.使用ImageSize(不能为null)和imageUri(可为null)
+	2.@Override
+	public int getId() {
+		return TextUtils.isEmpty(imageUri) ? super.hashCode() : imageUri.hashCode();
+	}
+	3.其他的 do nothing

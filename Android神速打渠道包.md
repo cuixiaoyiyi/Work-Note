@@ -1,0 +1,124 @@
+今天翻出了美团分享的Android打包分析。
+
+http://tech.meituan.com/mt-apk-packaging.html 
+
+打Android渠道包基本有以下几种思路
+    
+    1.Maven
+    2.apktool 逆向工程(反编译，然后使用Python替换AndroidManifest中的渠道value，重新签名打包)
+    3.直接替换apk中的某个文件（apk本质是个zip文件，在其 /META-INF 目录下添加一个空文件不需要重新签名）
+
+
+这里站在前人肩膀上，介绍第三种方案。
+Pyhton脚本
+  
+      #!/usr/bin/python
+      # coding=utf-8
+      import zipfile
+      import shutil
+      import os
+      
+      # 空文件 便于写入此空文件到apk包中作为channel文件
+      src_empty_file = 'info/czt.txt'
+      # 创建一个空文件（不存在则创建）
+      f = open(src_empty_file, 'w') 
+      f.close()
+      
+      # 获取当前目录中所有的apk源包
+      src_apks = []
+      # python3 : os.listdir()即可，这里使用兼容Python2的os.listdir('.')
+      for file in os.listdir('.'):
+          if os.path.isfile(file):
+              extension = os.path.splitext(file)[1][1:]
+              if extension in 'apk':
+                  src_apks.append(file)
+      
+      # 获取渠道列表
+      channel_file = 'info/channels.txt'
+      f = open(channel_file)
+      lines = f.readlines()
+      f.close()
+      
+      for src_apk in src_apks:
+          # file name (with extension)
+          src_apk_file_name = os.path.basename(src_apk)
+          # 分割文件名与后缀
+          temp_list = os.path.splitext(src_apk_file_name)
+          # name without extension
+          src_apk_name = temp_list[0]
+          # 后缀名，包含.   例如: ".apk "
+          src_apk_extension = temp_list[1]
+          
+          # 创建生成目录,与文件名相关
+          output_dir = 'output_' + src_apk_name + '/'
+          # 目录不存在则创建
+          if not os.path.exists(output_dir):
+              os.mkdir(output_dir)
+              
+          # 遍历渠道号并创建对应渠道号的apk文件
+          for line in lines:
+              # 获取当前渠道号，因为从渠道文件中获得带有\n,所有strip一下
+              target_channel = line.strip()
+              # 拼接对应渠道号的apk
+              target_apk = output_dir + src_apk_name + "-" + target_channel + src_apk_extension  
+              # 拷贝建立新apk
+              shutil.copy(src_apk,  target_apk)
+              # zip获取新建立的apk文件
+              zipped = zipfile.ZipFile(target_apk, 'a', zipfile.ZIP_DEFLATED)
+              # 初始化渠道信息
+              empty_channel_file = "META-INF/{channel}".format(channel = target_channel)
+              # 写入渠道信息
+              zipped.write(src_empty_file, empty_channel_file)
+              # 关闭zip流
+              zipped.close()
+              
+              
+  android 端对应的改动：
+        
+        /**
+	 * 从apk中获取渠道信息
+	 * 
+	 * @return 渠道名称
+	 */
+	public static String getChannelFromApk() {
+		// 从apk包中获取
+		ApplicationInfo appinfo = App.getInstance().getApplicationInfo();
+		String sourceDir = appinfo.sourceDir;
+		// 注意这里：默认放在meta-inf/里， 所以需要再拼接一下
+		String key = "META-INF/" + "channel_";
+		String ret = "";
+		ZipFile zipfile = null;
+		try {
+			zipfile = new ZipFile(sourceDir);
+			Enumeration<?> entries = zipfile.entries();
+			while (entries.hasMoreElements()) {
+				ZipEntry entry = ((ZipEntry) entries.nextElement());
+				String entryName = entry.getName();
+				if (entryName.startsWith(key)) {
+					ret = entryName;
+					break;
+				}
+			}
+		} catch (IOException e) {
+			e.printStackTrace();
+		} finally {
+			if (zipfile != null) {
+				try {
+					zipfile.close();
+				} catch (IOException e) {
+					e.printStackTrace();
+				}
+			}
+		}
+		String[] split = ret.split("_");
+		String channel = "";
+		if (split != null && split.length >= 2) {
+			channel = ret.substring(split[0].length() + 1);
+		}
+		return channel;
+	}
+	
+	
+	
+在umeng统计中在应用程序启动时可以调用：
+AnalyticsConfig.setChannel(Util.getChannelFromApk());
